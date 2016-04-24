@@ -5,6 +5,9 @@ import android.util.Base64;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.ContentResolver;
+import android.provider.Settings;
+import android.app.KeyguardManager;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaArgs;
@@ -46,6 +49,11 @@ public class SecureStorage extends CordovaPlugin {
 
     @Override
     public boolean execute(String action, CordovaArgs args, final CallbackContext callbackContext) throws JSONException {
+        if (!doesDeviceHaveSecuritySetup()) {
+            callbackContext.error("device not protected");
+            return true;
+        }
+
         if ("init".equals(action)) {
             ALIAS = getContext().getPackageName() + "." + args.getString(0);
             if (!RSA.isEntryAvailable(ALIAS)) {
@@ -104,5 +112,41 @@ public class SecureStorage extends CordovaPlugin {
 
     private void startActivity(Intent intent){
         cordova.getActivity().startActivity(intent);
+    }
+
+    private boolean doesDeviceHaveSecuritySetup()
+    {
+        Context context = getContext();
+
+        return isPatternSet(context) || isPassOrPinSet(context);
+    }
+
+    /**
+     * @param context
+     * @return true if pattern set, false if not (or if an issue when checking)
+     */
+    private boolean isPatternSet(Context context)
+    {
+        ContentResolver cr = context.getContentResolver();
+        try
+        {
+            int lockPatternEnable = Settings.Secure.getInt(cr, Settings.Secure.LOCK_PATTERN_ENABLED);
+            return lockPatternEnable == 1;
+        }
+        catch (Settings.SettingNotFoundException e)
+        {
+            Log.e(TAG, "failed:", e);
+            return false;
+        }
+    }
+
+    /**
+     * @param context
+     * @return true if pass or pin set
+     */
+    private boolean isPassOrPinSet(Context context)
+    {
+        KeyguardManager keyguardManager = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE); //api 16+
+        return keyguardManager.isKeyguardSecure();
     }
 }
